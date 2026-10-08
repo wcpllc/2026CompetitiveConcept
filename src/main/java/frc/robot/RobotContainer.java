@@ -11,16 +11,19 @@ import static edu.wpi.first.units.Units.Radians;
 import static edu.wpi.first.units.Units.RadiansPerSecond;
 import static edu.wpi.first.units.Units.RadiansPerSecondPerSecond;
 
+import java.io.File;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import org.littletonrobotics.junction.Logger;
 
 import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix6.swerve.SwerveRequest;
-import com.pathplanner.lib.auto.AutoBuilder;
-import com.pathplanner.lib.auto.NamedCommands;
-import com.pathplanner.lib.commands.PathPlannerAuto;
-import com.pathplanner.lib.util.FlippingUtil;
+import frc.robot.lib.BLine.FlippingUtil;
+import frc.robot.lib.BLine.FollowPath;
+import frc.robot.lib.BLine.Path;
 
 import edu.wpi.first.math.filter.SlewRateLimiter;
 import edu.wpi.first.math.geometry.Pose2d;
@@ -31,6 +34,7 @@ import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.units.measure.Angle;
 import edu.wpi.first.units.measure.LinearVelocity;
 import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
@@ -60,9 +64,7 @@ import frc.robot.subsystems.VisionSubsystem;
 import frc.robot.subsystems.Hanger.Position;
 import frc.robot.subsystems.Intake.Speed;
 
-import com.pathplanner.lib.auto.AutoBuilder;
-import com.pathplanner.lib.auto.NamedCommands;
-import org.littletonrobotics.junction.Logger;
+import edu.wpi.first.math.controller.PIDController;
 
 
 /**
@@ -130,6 +132,14 @@ public class RobotContainer {
     private ManualDriveCommand manualDriveCommand;
 
     private SendableChooser<Command> autoChooser;
+    private FollowPath.Builder pathBuilder;
+    private final SwerveRequest.ApplyRobotSpeeds applyRobotSpeeds = new SwerveRequest.ApplyRobotSpeeds();
+
+    /**
+     * BLine paths keyed by the auto chooser name, used to look up each auto's starting pose.
+     * A FollowPath command doesn't hand its Path back, so keep a reference to each Path here.
+     */
+    private final Map<String, Path> autoPaths = new HashMap<>();
     
     /** The container for the robot. Contains subsystems, OI devices, and commands. */
     public RobotContainer() {
@@ -177,23 +187,68 @@ public class RobotContainer {
     }
 
     private void configureAutonomous() {
-        NamedCommands.registerCommand("Intake", intake.intakeCommand());
-        NamedCommands.registerCommand("Aim and Shoot", subsystemCommands.aimAndShoot());
-        NamedCommands.registerCommand("Shoot Manually", subsystemCommands.shootManually());
-        NamedCommands.registerCommand("Shoot Manual with Shot Table", subsystemCommands.shootManualWithShotTable());
-        // Extend the hanger (hooks) to be able to reach the L1 bar
-        NamedCommands.registerCommand("Hanger Extend Command", hanger.positionCommand(Hanger.Position.HANGER_EXTEND));
-        // Retract the hanger to hook onto the L1 bar
-        NamedCommands.registerCommand("Hanger Hook Command", hanger.positionCommand(Hanger.Position.HANGER_HOME));
+        // BLine follower (replaces PathPlanner's AutoBuilder configuration).
+        pathBuilder = new FollowPath.Builder(
+            swerve,
+            () -> swerve.getState().Pose,
+            () -> swerve.getState().Speeds,  // robot-relative
+            speeds -> swerve.setControl(applyRobotSpeeds.withSpeeds(speeds)),
+            new PIDController(5.0, 0.0, 0.0),  // translation
+            new PIDController(3.0, 0.0, 0.0),  // rotation
+            new PIDController(2.0, 0.0, 0.0)   // cross-track
+        ).withDefaultShouldFlip();
 
-        NamedCommands.registerCommand("Set Hood to 0.3", hood.positionCommand(0.3));
-        NamedCommands.registerCommand("Set Hood to 0.5", hood.positionCommand(0.5));
-        NamedCommands.registerCommand("Shoot Manual For Shoot Auto", subsystemCommands.shootManualForShootAuto());
-        NamedCommands.registerCommand("Extend Hopper", hanger.positionCommand(Hanger.Position.EXTEND_HOPPER)
+        // NamedCommands.registerCommand -> FollowPath.registerEventTrigger
+        FollowPath.registerEventTrigger("Intake", intake.intakeCommand());
+        FollowPath.registerEventTrigger("Aim and Shoot", subsystemCommands.aimAndShoot());
+        FollowPath.registerEventTrigger("Shoot Manually", subsystemCommands.shootManually());
+        FollowPath.registerEventTrigger("Shoot Manual with Shot Table", subsystemCommands.shootManualWithShotTable());
+        // Extend the hanger (hooks) to be able to reach the L1 bar
+        FollowPath.registerEventTrigger("Hanger Extend Command", hanger.positionCommand(Hanger.Position.HANGER_EXTEND));
+        // Retract the hanger to hook onto the L1 bar
+        FollowPath.registerEventTrigger("Hanger Hook Command", hanger.positionCommand(Hanger.Position.HANGER_HOME));
+
+        FollowPath.registerEventTrigger("Set Hood to 0.3", hood.positionCommand(0.3));
+        FollowPath.registerEventTrigger("Set Hood to 0.5", hood.positionCommand(0.5));
+        FollowPath.registerEventTrigger("Shoot Manual For Shoot Auto", subsystemCommands.shootManualForShootAuto());
+        FollowPath.registerEventTrigger("Extend Hopper", hanger.positionCommand(Hanger.Position.EXTEND_HOPPER)
                                                                 .alongWith(Commands.print("====Setting Hanger to EXTEND HOPPER")));
 
-        autoChooser = AutoBuilder.buildAutoChooser("Left Neutral Stage Auto");
+        // AutoBuilder.buildAutoChooser -> buildAutoChooser (below)
+        autoChooser = buildAutoChooser("Left Neutral Stage Auto");
         SmartDashboard.putData("Auto Mode", autoChooser);
+    }
+
+    /**
+     * BLine version of AutoBuilder.buildAutoChooser: adds one chooser option for every path
+     * JSON in deploy/autos/paths, named after the file (without .json).
+     */
+    private SendableChooser<Command> buildAutoChooser(String defaultAutoName) {
+        SendableChooser<Command> chooser = new SendableChooser<>();
+        File[] files = new File(Filesystem.getDeployDirectory(), "autos/paths")
+            .listFiles((dir, fileName) -> fileName.endsWith(".json"));
+        if (files == null) {
+            DriverStation.reportWarning("No BLine paths found in deploy/autos/paths", false);
+            return chooser;
+        }
+        Arrays.sort(files);
+        for (File file : files) {
+            String name = file.getName().substring(0, file.getName().length() - ".json".length());
+            try {
+                Path path = new Path(name);
+                // Keep an unflipped copy; the follower flips the path it runs for red alliance.
+                autoPaths.put(name, path.copy());
+                Command command = pathBuilder.build(path);
+                if (name.equals(defaultAutoName)) {
+                    chooser.setDefaultOption(name, command);
+                } else {
+                    chooser.addOption(name, command);
+                }
+            } catch (Exception e) {
+                DriverStation.reportError("Failed to load BLine path " + name + ": " + e.getMessage(), e.getStackTrace());
+            }
+        }
+        return chooser;
     }
 
     private void configureFuelSim() {
@@ -307,10 +362,11 @@ public class RobotContainer {
     public String getSelectedAutoName() {
         return SmartDashboard.getString("Auto Mode/selected", "Left Neutral Stage Auto");
     }
-
     public void resetPositionForAuto() {
-    if (autoChooser.getSelected() instanceof PathPlannerAuto auto) {
-      Pose2d startingPose = auto.getStartingPose();
+    if (autoChooser.getSelected() != null) {
+      // instanceof PathPlannerAuto auto / auto.getStartingPose() -> BLine Path / getStartPose()
+      Path auto = autoPaths.get(getSelectedAutoName());
+      Pose2d startingPose = (auto != null) ? auto.getStartPose() : null;
       if (startingPose == null) {
         if (getSelectedAutoName().equals("sideMiddleShoot")) {
             startingPose = new Pose2d(3.503, 5.518, Rotation2d.kZero);
