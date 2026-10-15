@@ -106,8 +106,11 @@ public class Autos {
                 .toArray(Command[]::new));
     }
 
-    public static final List<AutoRoutine> AUTO_ROUTINES = List.of(
-        new AutoRoutine(true, "", List.of("", ""))
+    public static final List<AutoRoutine> AUTO_ROUTINES = 
+        List.of(    
+        new AutoRoutine(
+            true, 
+                "9584-Madtown-auto", List.of("9584-Madtown-auto"))
         // add your routines here
         
     );

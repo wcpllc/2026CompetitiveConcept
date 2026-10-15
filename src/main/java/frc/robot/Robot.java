@@ -95,7 +95,6 @@ public class Robot extends LoggedRobot {
         //m_robotContainer.setSwerveSteerNeutralMode(NeutralModeValue.Coast);
         m_robotContainer.requestSwerveIdle();
         m_robotContainer.logSwerveStickyFaults();
-    }
 
     @Override
     public void disabledPeriodic() {
