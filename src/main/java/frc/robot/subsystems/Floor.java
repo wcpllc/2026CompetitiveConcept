@@ -16,13 +16,15 @@ import edu.wpi.first.units.measure.Voltage;
 import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
+import org.littletonrobotics.junction.Logger;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.robot.Ports;
+import frc.robot.sim.SimDeviceRegistrar;
 
 public class Floor extends SubsystemBase {
     public enum Speed {
         STOP(0),
-        FEED(0.83);
+        FEED(0.95);
 
         private final double percentOutput;
 
@@ -38,24 +40,27 @@ public class Floor extends SubsystemBase {
     private final TalonFX motor;
     private final VoltageOut voltageRequest = new VoltageOut(0);
 
+    private double cachedRPM, cachedStatorCurrent, cachedSupplyCurrent, cachedTemp;
+
     public Floor() {
         motor = new TalonFX(Ports.kFloor, Ports.kRoboRioCANBus);
 
         final TalonFXConfiguration config = new TalonFXConfiguration()
             .withMotorOutput(
                 new MotorOutputConfigs()
-                    .withInverted(InvertedValue.Clockwise_Positive)
+                    .withInverted(InvertedValue.CounterClockwise_Positive)
                     .withNeutralMode(NeutralModeValue.Brake)
             )
             .withCurrentLimits(
                 new CurrentLimitsConfigs()
-                    .withStatorCurrentLimit(Amps.of(120))
+                    .withStatorCurrentLimit(Amps.of(80))
                     .withStatorCurrentLimitEnable(true)
-                    .withSupplyCurrentLimit(Amps.of(30))
+                    .withSupplyCurrentLimit(Amps.of(40))
                     .withSupplyCurrentLimitEnable(true)
             );
 
         motor.getConfigurator().apply(config);
+        SimDeviceRegistrar.registerTalonFX(motor);
         SmartDashboard.putData(this);
     }
 
@@ -67,14 +72,26 @@ public class Floor extends SubsystemBase {
     }
 
     public Command feedCommand() {
-        return startEnd(() -> set(Speed.FEED), () -> set(Speed.STOP));
+        System.out.println("================Floor Feed Command");
+        return startEnd(() -> {System.out.println("Starting floor feed"); set(Speed.FEED);}, () -> {System.out.println("stopping floor feed"); set(Speed.STOP);});
+    }
+
+    @Override
+    public void periodic() {
+        cachedRPM = motor.getVelocity().getValue().in(RPM);
+        cachedStatorCurrent = motor.getStatorCurrent().getValueAsDouble();
+        cachedSupplyCurrent = motor.getSupplyCurrent().getValueAsDouble();
+        cachedTemp = motor.getDeviceTemp().getValueAsDouble();
+
+        Logger.recordOutput("Floor/SupplyCurrent", cachedSupplyCurrent);
+        Logger.recordOutput("Floor/Temp", cachedTemp);
     }
 
     @Override
     public void initSendable(SendableBuilder builder) {
         builder.addStringProperty("Command", () -> getCurrentCommand() != null ? getCurrentCommand().getName() : "null", null);
-        builder.addDoubleProperty("RPM", () -> motor.getVelocity().getValue().in(RPM), null);
-        builder.addDoubleProperty("Stator Current", () -> motor.getStatorCurrent().getValue().in(Amps), null);
-        builder.addDoubleProperty("Supply Current", () -> motor.getSupplyCurrent().getValue().in(Amps), null);
+        builder.addDoubleProperty("RPM", () -> cachedRPM, null);
+        builder.addDoubleProperty("Floor Stator Current", () -> cachedStatorCurrent, null);
+        builder.addDoubleProperty("Floor Supply Current", () -> cachedSupplyCurrent, null);
     }
 }

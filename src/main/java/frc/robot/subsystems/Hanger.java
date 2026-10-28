@@ -27,18 +27,20 @@ import edu.wpi.first.units.measure.Per;
 import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
+import org.littletonrobotics.junction.Logger;
 import edu.wpi.first.wpilibj2.command.Command.InterruptionBehavior;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.robot.Constants.KrakenX60;
 import frc.robot.Ports;
+import frc.robot.sim.SimDeviceRegistrar;
 
 public class Hanger extends SubsystemBase {
     public enum Position {
         HOMED(0),
-        EXTEND_HOPPER(2),
-        HANGING(6),
-        HUNG(0.2);
+        EXTEND_HOPPER(-2),
+        HANGER_EXTEND(-5.5), //hanger goes to negative position for some reason, did this to fix, can change later
+        HANGER_HOME(0);
 
         private final double inches;
 
@@ -60,6 +62,7 @@ public class Hanger extends SubsystemBase {
     private final VoltageOut voltageRequest = new VoltageOut(0);
 
     private boolean isHomed = false;
+    private double cachedExtensionInches, cachedSupplyCurrent, cachedTemp;
 
     public Hanger() {
         motor = new TalonFX(Ports.kHanger, Ports.kRoboRioCANBus);
@@ -72,9 +75,9 @@ public class Hanger extends SubsystemBase {
             )
             .withCurrentLimits(
                 new CurrentLimitsConfigs()
-                    .withStatorCurrentLimit(Amps.of(20))
+                    .withStatorCurrentLimit(Amps.of(45))
                     .withStatorCurrentLimitEnable(true)
-                    .withSupplyCurrentLimit(Amps.of(70))
+                    .withSupplyCurrentLimit(Amps.of(35))
                     .withSupplyCurrentLimitEnable(true)
             )
             .withMotionMagic(
@@ -91,6 +94,7 @@ public class Hanger extends SubsystemBase {
             );
 
         motor.getConfigurator().apply(config);
+        SimDeviceRegistrar.registerTalonFX(motor);
         SmartDashboard.putData(this);
     }
 
@@ -109,11 +113,26 @@ public class Hanger extends SubsystemBase {
     }
 
     public Command positionCommand(Position position) {
-        return runOnce(() -> set(position))
-            .andThen(Commands.waitUntil(this::isExtensionWithinTolerance));
+        System.out.println("====Hanger Position Command");
+        return runOnce(() -> 
+            {
+                System.out.println("Setting hanger position to " + position);
+                set(position);
+
+            })
+            .andThen(Commands.waitUntil(this::isExtensionWithinTolerance))
+            .andThen(Commands.print("Hanger position set"));
     }
 
-    public Command homingCommand() {
+    public Command climbCommand() {
+        return positionCommand(Position.HANGER_EXTEND);
+    }
+
+    public Command unclimbCommand() {
+        return positionCommand(Position.HANGER_HOME);
+    }
+
+    public Command homingHopperCommand() {
         return Commands.sequence(
             runOnce(() -> setPercentOutput(-0.05)),
             Commands.waitUntil(() -> motor.getSupplyCurrent().getValue().in(Amps) > 0.4),
@@ -143,9 +162,19 @@ public class Hanger extends SubsystemBase {
     }
 
     @Override
+    public void periodic() {
+        cachedExtensionInches = motorAngleToExtension(motor.getPosition().getValue()).in(Inches);
+        cachedSupplyCurrent = motor.getSupplyCurrent().getValueAsDouble();
+        cachedTemp = motor.getDeviceTemp().getValueAsDouble();
+
+        Logger.recordOutput("Hanger/SupplyCurrent", cachedSupplyCurrent);
+        Logger.recordOutput("Hanger/Temp", cachedTemp);
+    }
+
+    @Override
     public void initSendable(SendableBuilder builder) {
         builder.addStringProperty("Command", () -> getCurrentCommand() != null ? getCurrentCommand().getName() : "null", null);
-        builder.addDoubleProperty("Extension (inches)", () -> motorAngleToExtension(motor.getPosition().getValue()).in(Inches), null);
-        builder.addDoubleProperty("Supply Current", () -> motor.getSupplyCurrent().getValue().in(Amps), null);
+        builder.addDoubleProperty("Extension (inches)", () -> cachedExtensionInches, null);
+        builder.addDoubleProperty("Hanger Supply Current", () -> cachedSupplyCurrent, null);
     }
 }

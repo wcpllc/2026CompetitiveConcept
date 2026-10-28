@@ -1,12 +1,17 @@
 package frc.util;
 
+import java.util.Objects;
+import java.util.function.Supplier;
+
+import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.swerve.SwerveDrivetrain.SwerveDriveState;
 
 import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Pose3d;
+import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
-import edu.wpi.first.networktables.DoubleArrayPublisher;
 import edu.wpi.first.networktables.DoublePublisher;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableInstance;
@@ -27,8 +32,10 @@ public class SwerveTelemetry {
      * 
      * @param maxSpeed Maximum speed in meters per second
      */
-    public SwerveTelemetry(double maxSpeed) {
+    public SwerveTelemetry(double maxSpeed, Supplier<Rotation3d> rotationSupplier) {
         MaxSpeed = maxSpeed;
+        this.rotationSupplier = Objects.requireNonNull(rotationSupplier);
+        SignalLogger.start();
 
         /* Set up the module state Mechanism2d telemetry */
         for (int i = 0; i < 4; ++i) {
@@ -51,8 +58,10 @@ public class SwerveTelemetry {
 
     /* Robot pose for field positioning */
     private final NetworkTable table = inst.getTable("Pose");
-    private final DoubleArrayPublisher fieldPub = table.getDoubleArrayTopic("robotPose").publish();
+    private final StructPublisher<Pose3d> fieldPosePublisher = table.getStructTopic("robotPose", Pose3d.struct).publish();
     private final StringPublisher fieldTypePub = table.getStringTopic(".type").publish();
+
+    private final Supplier<Rotation3d> rotationSupplier;
 
     /* Mechanisms to represent the swerve module states */
     private final Mechanism2d[] m_moduleMechanisms = new Mechanism2d[] {
@@ -80,8 +89,6 @@ public class SwerveTelemetry {
             .append(new MechanismLigament2d("Direction", 0.1, 0, 0, new Color8Bit(Color.kWhite))),
     };
 
-    private final double[] m_poseArray = new double[3];
-
     /** Accept the swerve drive state and telemeterize it to SmartDashboard and SignalLogger. */
     public void telemeterize(SwerveDriveState state) {
         /* Telemeterize the swerve drive state */
@@ -93,13 +100,9 @@ public class SwerveTelemetry {
         driveTimestamp.set(state.Timestamp);
         driveOdometryFrequency.set(1.0 / state.OdometryPeriod);
 
-        /* Telemeterize the pose to a Field2d */
-        fieldTypePub.set("Field2d");
-
-        m_poseArray[0] = state.Pose.getX();
-        m_poseArray[1] = state.Pose.getY();
-        m_poseArray[2] = state.Pose.getRotation().getDegrees();
-        fieldPub.set(m_poseArray);
+        /* Publish Pose3d data for AdvantageScope's 3D field */
+        fieldTypePub.set("Field3d");
+        fieldPosePublisher.set(asPose3d(state));
 
         /* Telemeterize each module state to a Mechanism2d */
         for (int i = 0; i < 4; ++i) {
@@ -107,5 +110,13 @@ public class SwerveTelemetry {
             m_moduleDirections[i].setAngle(state.ModuleStates[i].angle);
             m_moduleSpeeds[i].setLength(state.ModuleStates[i].speedMetersPerSecond / (2 * MaxSpeed));
         }
+    }
+
+    private Pose3d asPose3d(SwerveDriveState state) {
+        Rotation3d rotation = rotationSupplier.get();
+        if (rotation == null) {
+            rotation = new Rotation3d(0.0, 0.0, state.Pose.getRotation().getRadians());
+        }
+        return new Pose3d(state.Pose.getX(), state.Pose.getY(), 0.0, rotation);
     }
 }

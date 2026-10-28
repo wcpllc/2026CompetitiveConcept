@@ -11,6 +11,8 @@ import edu.wpi.first.math.interpolation.InterpolatingTreeMap;
 import edu.wpi.first.math.interpolation.Interpolator;
 import edu.wpi.first.math.interpolation.InverseInterpolator;
 import edu.wpi.first.units.measure.Distance;
+import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.Landmarks;
@@ -31,10 +33,22 @@ public class PrepareShotCommand extends Command {
             )
     );
 
-    static {
-        distanceToShotMap.put(Inches.of(52.0), new Shot(2800, 0.19));
-        distanceToShotMap.put(Inches.of(114.4), new Shot(3275, 0.40));
-        distanceToShotMap.put(Inches.of(165.5), new Shot(3650, 0.48));
+    private static final double kFixedHoodPosition = 0.9;
+
+   // static {
+    //    distanceToShotMap.put(Inches.of(52.0), new Shot(2800, 0.19)); //from wcp code
+    //    distanceToShotMap.put(Inches.of(114.4), new Shot(3275, 0.40)); //might want to increase speed by like 20%ish
+    //    distanceToShotMap.put(Inches.of(165.5), new Shot(3650, 0.48));
+   // }
+
+    // TUNE THIS DURING COMP
+     static {
+         distanceToShotMap.put(Inches.of(16.5), new Shot(2950, 0.2));
+         distanceToShotMap.put(Inches.of(43.5), new Shot(3000, 0.35)); 
+         distanceToShotMap.put(Inches.of(117.5), new Shot(3500, 0.45));
+         distanceToShotMap.put(Inches.of(139.9), new Shot(3300, 0.53));
+         distanceToShotMap.put(Inches.of(156.0), new Shot(3650, 0.55));
+         distanceToShotMap.put(Inches.of(175.0), new Shot(3750,0.60));
     }
 
     private final Shooter shooter;
@@ -52,9 +66,12 @@ public class PrepareShotCommand extends Command {
         return shooter.isVelocityWithinTolerance() && hood.isPositionWithinTolerance();
     }
 
+    private static final Translation2d kDefaultBlueHubPosition = new Translation2d(Inches.of(182.105), Inches.of(158.845));
+    private static final Translation2d kDefaultRedHubPosition = new Translation2d(Inches.of(469.115), Inches.of(158.845));
+
     private Distance getDistanceToHub() {
         final Translation2d robotPosition = robotPoseSupplier.get().getTranslation();
-        final Translation2d hubPosition = Landmarks.hubPosition();
+        final Translation2d hubPosition = DriverStation.getAlliance().get().equals(Alliance.Blue) ? kDefaultBlueHubPosition : kDefaultRedHubPosition;
         return Meters.of(robotPosition.getDistance(hubPosition));
     }
 

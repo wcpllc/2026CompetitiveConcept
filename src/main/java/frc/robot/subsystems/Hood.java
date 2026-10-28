@@ -20,21 +20,20 @@ import frc.robot.Ports;
 
 public class Hood extends SubsystemBase {
     private static final Distance kServoLength = Millimeters.of(100);
-    private static final LinearVelocity kMaxServoSpeed = Millimeters.of(20).per(Second);
+    private static final LinearVelocity kMaxServoSpeed = Millimeters.of(40).per(Second);
     private static final double kMinPosition = 0.01;
-    private static final double kMaxPosition = 0.77;
+    private static final double kMaxPosition = 0.8;
     private static final double kPositionTolerance = 0.01;
 
-    private final Servo leftServo;
-    private final Servo rightServo;
+    private final Servo leftServo, rightServo;
 
-    private double currentPosition = 0.5;
-    private double targetPosition = 0.5;
+    private double currentPosition = 0.01;
+    private double targetPosition = 0.01;
     private Time lastUpdateTime = Seconds.of(0);
 
     public Hood() {
-        leftServo = new Servo(Ports.kHoodLeftServo);
-        rightServo = new Servo(Ports.kHoodRightServo);
+        leftServo = new Servo(Ports.leftServoPort);
+        rightServo = new Servo(Ports.rightServoPort);
         leftServo.setBoundsMicroseconds(2000, 1800, 1500, 1200, 1000);
         rightServo.setBoundsMicroseconds(2000, 1800, 1500, 1200, 1000);
         setPosition(currentPosition);
@@ -85,6 +84,8 @@ public class Hood extends SubsystemBase {
     public void initSendable(SendableBuilder builder) {
         builder.addStringProperty("Command", () -> getCurrentCommand() != null ? getCurrentCommand().getName() : "null", null);
         builder.addDoubleProperty("Current Position", () -> currentPosition, null);
+        builder.addDoubleProperty("Left Servo Position", () -> leftServo.getPosition(), null);
+        builder.addDoubleProperty("Right Servo Position", () -> rightServo.getPosition(), null);
         builder.addDoubleProperty("Target Position", () -> targetPosition, value -> setPosition(value));
     }
 }

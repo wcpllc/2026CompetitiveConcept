@@ -1,0 +1,1 @@
+firstfrc.blob.core.windows.net/frc2026/Manual/2026GameManual.pdf

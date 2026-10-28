@@ -137,6 +137,7 @@ $RECYCLE.BIN/
 
 ### Gradle ###
 .gradle
+.gradle-local/
 /build/
 
 # Ignore Gradle GUI config
@@ -185,3 +186,6 @@ compile_commands.json
 
 # Eclipse generated file for annotation processors
 .factorypath
+
+# model file
+*.glb
