@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import edu.wpi.first.wpilibj.Alert;
+import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.PowerDistribution;
@@ -36,6 +38,14 @@ import org.littletonrobotics.junction.wpilog.WPILOGWriter;
  * this project, you must also update the Main.java file in the project.
  */
 public class Robot extends LoggedRobot {
+    /** A USB stick plugged into the roboRIO shows up here. Preferred, because it is easy to pull. */
+    private static final String kUsbLogPath = "/media/sda1/";
+    /** Used when no USB stick is present. Download with AdvantageScope's File > Download Logs. */
+    private static final String kOnboardLogPath = "/home/lvuser/logs/";
+    private final Alert noUsbLogAlert = new Alert(
+        "No USB stick found. Logs are going to " + kOnboardLogPath + " on the roboRIO instead.",
+        AlertType.kWarning);
+
     private final RobotContainer m_robotContainer;
     private Command m_autonomousCommand;
     private final PowerDistribution pdh = new PowerDistribution(1, ModuleType.kRev);
@@ -204,7 +214,9 @@ public class Robot extends LoggedRobot {
         Logger.recordMetadata("Robot", RobotBase.isReal() ? "Real" : "Simulation");
 
         if (RobotBase.isReal()) {
-            Logger.addDataReceiver(new WPILOGWriter("/media/sda1/"));
+            String logPath = chooseRealRobotLogPath();
+            Logger.recordMetadata("LogPath", logPath);
+            Logger.addDataReceiver(new WPILOGWriter(logPath));
         } else {
             try {
                 Files.createDirectories(Path.of("logs"));
@@ -216,6 +228,22 @@ public class Robot extends LoggedRobot {
 
         Logger.addDataReceiver(new NT4Publisher());
         Logger.start();
+    }
+
+    /** Picks the USB stick if one is mounted and writable, otherwise the roboRIO's own storage. */
+    private String chooseRealRobotLogPath() {
+        Path usb = Path.of(kUsbLogPath);
+        if (Files.isDirectory(usb) && Files.isWritable(usb)) {
+            noUsbLogAlert.set(false);
+            return kUsbLogPath;
+        }
+        try {
+            Files.createDirectories(Path.of(kOnboardLogPath));
+        } catch (IOException ex) {
+            DriverStation.reportError("Failed to create onboard log directory: " + ex.getMessage(), false);
+        }
+        noUsbLogAlert.set(true);
+        return kOnboardLogPath;
     }
 }
 // comment to create pr

@@ -28,8 +28,6 @@ import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.units.measure.Angle;
-import edu.wpi.first.units.measure.Current;
-import edu.wpi.first.units.measure.Temperature;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.Notifier;
@@ -77,14 +75,8 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
 
     private final StatusSignal<Angle> pitchSignal;
     private final StatusSignal<Angle> rollSignal;
-    private final List<StatusSignal<Current>> driveSupplyCurrentSignals;
-    private final List<StatusSignal<Current>> steerSupplyCurrentSignals;
-    private final List<StatusSignal<Temperature>> driveTempSignals;
-    private final List<StatusSignal<Temperature>> steerTempSignals;
-    private final double[] driveCurrents = new double[4];
-    private final double[] steerCurrents = new double[4];
-    private final double[] driveTemps = new double[4];
-    private final double[] steerTemps = new double[4];
+    /** Per-module currents, temperatures, encoder health, and faults. See docs/drivetrain-log-guide.md. */
+    private final SwerveModuleDiagnostics moduleDiagnostics;
 
     public CommandSwerveDrivetrain(SwerveDrivetrainConstants drivetrainConstants,
         SwerveModuleConstants<?, ?, ?>... modules) {
@@ -92,18 +84,9 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
 
         pitchSignal = getPigeon2().getPitch();
         rollSignal = getPigeon2().getRoll();
-        driveSupplyCurrentSignals = createDriveSupplyCurrentSignals();
-        steerSupplyCurrentSignals = createSteerSupplyCurrentSignals();
-        driveTempSignals = createDriveTempSignals();
-        steerTempSignals = createSteerTempSignals();
+        moduleDiagnostics = new SwerveModuleDiagnostics(getModules());
 
         BaseStatusSignal.setUpdateFrequencyForAll(kTelemetryUpdateFrequencyHz, pitchSignal, rollSignal);
-        for (int i = 0; i < driveSupplyCurrentSignals.size(); i++) {
-            driveSupplyCurrentSignals.get(i).setUpdateFrequency(kTelemetryUpdateFrequencyHz);
-            steerSupplyCurrentSignals.get(i).setUpdateFrequency(kTelemetryUpdateFrequencyHz);
-            driveTempSignals.get(i).setUpdateFrequency(kTelemetryUpdateFrequencyHz);
-            steerTempSignals.get(i).setUpdateFrequency(kTelemetryUpdateFrequencyHz);
-        }
         BaseStatusSignal.refreshAll(pitchSignal, rollSignal);
 
         configureAutoBuilder();
@@ -134,42 +117,6 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
 
     public void requestIdle() {
         setControl(idleRequest);
-    }
-
-    private List<StatusSignal<Current>> createDriveSupplyCurrentSignals() {
-        var modules = getModules();
-        List<StatusSignal<Current>> signals = new java.util.ArrayList<>(modules.length);
-        for (int i = 0; i < modules.length; i++) {
-            signals.add(modules[i].getDriveMotor().getSupplyCurrent());
-        }
-        return signals;
-    }
-
-    private List<StatusSignal<Current>> createSteerSupplyCurrentSignals() {
-        var modules = getModules();
-        List<StatusSignal<Current>> signals = new java.util.ArrayList<>(modules.length);
-        for (int i = 0; i < modules.length; i++) {
-            signals.add(modules[i].getSteerMotor().getSupplyCurrent());
-        }
-        return signals;
-    }
-
-    private List<StatusSignal<Temperature>> createDriveTempSignals() {
-        var modules = getModules();
-        List<StatusSignal<Temperature>> signals = new java.util.ArrayList<>(modules.length);
-        for (int i = 0; i < modules.length; i++) {
-            signals.add(modules[i].getDriveMotor().getDeviceTemp());
-        }
-        return signals;
-    }
-
-    private List<StatusSignal<Temperature>> createSteerTempSignals() {
-        var modules = getModules();
-        List<StatusSignal<Temperature>> signals = new java.util.ArrayList<>(modules.length);
-        for (int i = 0; i < modules.length; i++) {
-            signals.add(modules[i].getSteerMotor().getDeviceTemp());
-        }
-        return signals;
     }
 
     private void configureAutoBuilder() {
@@ -345,17 +292,7 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
         Logger.recordOutput("Drive/TiltMagnitudeDegrees", getTiltMagnitudeDegrees());
         Logger.recordOutput("Drive/OnBump", isRobotOnBump());
 
-        // for (int i = 0; i < driveSupplyCurrentSignals.size(); i++) {
-        //     driveCurrents[i] = driveSupplyCurrentSignals.get(i).getValueAsDouble();
-        //     steerCurrents[i] = steerSupplyCurrentSignals.get(i).getValueAsDouble();
-        //     driveTemps[i] = driveTempSignals.get(i).getValueAsDouble();
-        //     steerTemps[i] = steerTempSignals.get(i).getValueAsDouble();
-        // }
-
-        // Logger.recordOutput("Drive/DriveSupplyCurrents", driveCurrents);
-        // Logger.recordOutput("Drive/SteerSupplyCurrents", steerCurrents);
-        // Logger.recordOutput("Drive/DriveTemperatures", driveTemps);
-        // Logger.recordOutput("Drive/SteerTemperatures", steerTemps);
+        moduleDiagnostics.logPeriodic();
         
         Logger.recordOutput("BatteryVoltage", RobotController.getBatteryVoltage());
         Logger.recordOutput("Drive/TargetStates", getState().ModuleTargets);

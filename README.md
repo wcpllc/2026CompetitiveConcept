@@ -4,6 +4,9 @@ This repository contains the code used for the 9584 version of the WestCoast Pro
 
 The project is based on one of CTRE's [Phoenix 6 example projects](https://github.com/CrossTheRoadElec/Phoenix6-Examples/tree/main/java/SwerveWithChoreo). It uses WPILib [command-based programming](https://docs.wpilib.org/en/stable/docs/software/commandbased/what-is-command-based.html) to manage robot subsystems and actions, a [Limelight](https://limelightvision.io/) for vision, and [Pathplanner](https://pathplanner.dev/home.html) for autonomous path following.
 
+**Troubleshooting**
+If the robot is misbehaving, start with [Reading a Drivetrain Log](docs/drivetrain-log-guide.md). It explains how to pull a log off the robot and use it to find which part is at fault.
+
 **Simulation**
 We use [MapleSim](https://github.com/Shenzhen-Robotics-Alliance/maple-sim) with [AdvantageScope](https://docs.advantagescope.org/) for simulation.
 Using xbox controller to control in the simulation
