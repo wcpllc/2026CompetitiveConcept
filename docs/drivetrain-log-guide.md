@@ -18,22 +18,23 @@ The robot writes two kinds of log:
 
 | Log | What it holds | Where it goes |
 |---|---|---|
-| `.wpilog` (AdvantageKit) | Everything the robot code chose to record. This is the one this guide is about. | USB stick in the roboRIO, or `/home/lvuser/logs` on the roboRIO if no stick is plugged in |
-| `.hoot` (CTRE) | Every signal from every motor and sensor on the CAN bus. Very detailed, less friendly. | Same places |
+| `.wpilog` (AdvantageKit) | Everything the robot code chose to record. This is the one this guide is about. | The USB stick in the roboRIO |
+| `.hoot` (CTRE) | Every signal from every motor and sensor on the CAN bus. Very detailed, less friendly. | The USB stick, or the roboRIO if there is no stick |
 
-If no USB stick is plugged in, the dashboard shows a yellow alert saying logs are going to the
-roboRIO instead. That still works, but the roboRIO has limited space, so delete old logs from
-it every few weeks.
+**The `.wpilog` is only written if a USB stick is in the roboRIO.** We do not write it to the
+roboRIO's own storage on purpose: that disk is small and would fill up over a few practices.
+If no stick is in, the dashboard shows a red alert saying no log is being recorded. Check for
+that alert at the start of every practice. A session without a log cannot be investigated later.
 
 ## 2. Getting the log onto a laptop
 
-**If there is a USB stick in the roboRIO:** disable the robot, pull the stick, plug it into
-the laptop. The `.wpilog` files are at the top level of the stick.
+Disable the robot, pull the USB stick out of the roboRIO, and plug it into the laptop. The
+`.wpilog` files are at the top level of the stick.
 
-**If there is no USB stick:** connect the laptop to the robot (USB cable to the roboRIO, or
-the practice radio), open AdvantageScope, choose **File > Download Logs**, and enter the
-robot address (`10.95.84.2`). In AdvantageScope's preferences, set the roboRIO log folder to
-`/home/lvuser/logs`.
+If you would rather not pull the stick, connect the laptop to the robot (USB cable to the
+roboRIO, or the practice radio), open AdvantageScope, choose **File > Download Logs**, and
+enter the robot address (`10.95.84.2`). AdvantageScope's default roboRIO log folder is the
+USB stick, so no settings change is needed.
 
 Log files are named by date and time, so the newest one is the one from the session you just
 ran. Rename it to something useful before you forget, like
