@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import edu.wpi.first.wpilibj.Alert;
+import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.PowerDistribution;
@@ -36,6 +38,15 @@ import org.littletonrobotics.junction.wpilog.WPILOGWriter;
  * this project, you must also update the Main.java file in the project.
  */
 public class Robot extends LoggedRobot {
+    /**
+     * A USB stick plugged into the roboRIO shows up here. Logs are only written to the stick, never to
+     * the roboRIO's own storage, because that disk is small and would fill up over a few practices.
+     */
+    private static final String kUsbLogPath = "/media/sda1/";
+    private final Alert noUsbLogAlert = new Alert(
+        "No USB stick in the roboRIO. NO LOG IS BEING RECORDED this session.",
+        AlertType.kError);
+
     private final RobotContainer m_robotContainer;
     private Command m_autonomousCommand;
     private final PowerDistribution pdh = new PowerDistribution(1, ModuleType.kRev);
@@ -204,7 +215,14 @@ public class Robot extends LoggedRobot {
         Logger.recordMetadata("Robot", RobotBase.isReal() ? "Real" : "Simulation");
 
         if (RobotBase.isReal()) {
-            Logger.addDataReceiver(new WPILOGWriter("/media/sda1/"));
+            Path usb = Path.of(kUsbLogPath);
+            boolean usbPresent = Files.isDirectory(usb) && Files.isWritable(usb);
+            noUsbLogAlert.set(!usbPresent);
+            if (usbPresent) {
+                Logger.addDataReceiver(new WPILOGWriter(kUsbLogPath));
+            } else {
+                DriverStation.reportError("No USB stick in the roboRIO; no log will be recorded.", false);
+            }
         } else {
             try {
                 Files.createDirectories(Path.of("logs"));

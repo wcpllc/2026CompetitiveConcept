@@ -14,6 +14,7 @@ import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.units.measure.Time;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import org.littletonrobotics.junction.Logger;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.Constants.Driving;
 import frc.robot.subsystems.CommandSwerveDrivetrain;
@@ -135,6 +136,21 @@ public class ManualDriveCommand extends Command {
         previousInput = new ManualDriveInput();
     }
 
+    /**
+     * Records the driver's processed stick input and this command's state. AdvantageKit already logs
+     * the raw controller axes under DriverStation/Joystick0, so with these two together you can see
+     * whether a bad drive request came from the controller or from this code.
+     */
+    private void logInput(ManualDriveInput input) {
+        Logger.recordOutput("Drive/Input/Forward", input.forward);
+        Logger.recordOutput("Drive/Input/Left", input.left);
+        Logger.recordOutput("Drive/Input/Rotation", input.rotation);
+        Logger.recordOutput("Drive/Input/State", currentState.toString());
+        Logger.recordOutput("Drive/Input/RobotCentric", robotCentricMode);
+        Logger.recordOutput("Drive/Input/HeadingLocked", lockedHeading.isPresent());
+        Logger.recordOutput("Drive/Input/LockedHeadingDegrees", lockedHeading.map(Rotation2d::getDegrees).orElse(0.0));
+    }
+
     @Override
     public void execute() {
         final ManualDriveInput input = inputSmoother.getSmoothedInput();
@@ -146,6 +162,7 @@ public class ManualDriveCommand extends Command {
                     .withRotationalRate(Driving.kMaxRotationalRate.times(input.rotation))
             );
             previousInput = input;
+            logInput(input);
             return;
         }
         if (input.hasRotation()) {
@@ -179,6 +196,7 @@ public class ManualDriveCommand extends Command {
                 );
                 break;
         }
+        logInput(input);
     }
 
     @Override
