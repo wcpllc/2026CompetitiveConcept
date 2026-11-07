@@ -9,6 +9,7 @@ import static edu.wpi.first.units.Units.Volts;
 
 import java.util.function.BooleanSupplier;
 
+import com.ctre.phoenix6.BaseStatusSignal;
 import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
 import com.ctre.phoenix6.configs.FeedbackConfigs;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
@@ -74,6 +75,8 @@ public class Intake extends SubsystemBase {
     private static final double kPivotReduction = 62.5;
     private static final AngularVelocity kMaxPivotSpeed = KrakenX60.kFreeSpeed.div(kPivotReduction);
     private static final Angle kPositionTolerance = Degrees.of(5);
+    /** Currents default to 4 Hz, too coarse to see a jam or a stall in the log. */
+    private static final double kCurrentUpdateFrequencyHz = 50.0;
 
     private final TalonFX pivotMotor, rollerMotor;
     private final VoltageOut pivotVoltageRequest = new VoltageOut(0);
@@ -99,6 +102,9 @@ public class Intake extends SubsystemBase {
         rollerMotor = new TalonFX(Ports.kIntakeRollers, Ports.kRoboRioCANBus);
         configurePivotMotor();
         configureRollerMotor();
+        BaseStatusSignal.setUpdateFrequencyForAll(kCurrentUpdateFrequencyHz,
+            pivotMotor.getSupplyCurrent(), pivotMotor.getStatorCurrent(),
+            rollerMotor.getSupplyCurrent(), rollerMotor.getStatorCurrent());
         SimDeviceRegistrar.registerTalonFX(pivotMotor);
         SimDeviceRegistrar.registerTalonFX(rollerMotor);
         SmartDashboard.putData(this);
@@ -274,6 +280,17 @@ public class Intake extends SubsystemBase {
         Logger.recordOutput("Intake/RollerSupplyCurrent", cachedRollerSupplyCurrent);
         Logger.recordOutput("Intake/PivotTemp", cachedPivotTemp);
         Logger.recordOutput("Intake/RollerTemp", cachedRollerTemp);
+
+        // Where the pivot is versus where it was told to go, and whether the rollers actually spin.
+        // A stuck intake shows up as angle not following target, or roller RPM near zero with high current.
+        Logger.recordOutput("Intake/PivotAngleDegrees", cachedPivotAngleDeg);
+        Logger.recordOutput("Intake/PivotTargetDegrees", pivotMotionMagicRequest.getPositionMeasure().in(Degrees));
+        Logger.recordOutput("Intake/PivotControl", pivotMotor.getAppliedControl().getName());
+        Logger.recordOutput("Intake/PivotStatorCurrent", pivotMotor.getStatorCurrent().getValueAsDouble());
+        Logger.recordOutput("Intake/RollerRPM", cachedRollerRPM);
+        Logger.recordOutput("Intake/RollerSpeedSetting", currentSpeed.toString());
+        Logger.recordOutput("Intake/RollerStatorCurrent", rollerMotor.getStatorCurrent().getValueAsDouble());
+        Logger.recordOutput("Intake/Command", getCurrentCommand() != null ? getCurrentCommand().getName() : "none");
     }
 
     @Override
