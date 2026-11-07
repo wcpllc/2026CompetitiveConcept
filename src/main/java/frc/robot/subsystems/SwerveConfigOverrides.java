@@ -39,8 +39,13 @@ import edu.wpi.first.wpilibj.Alert.AlertType;
  *       70 A supply). Four drive motors at 70 A dragged the battery to 6.9 V (mttd p8). 20 A was too
  *       far the other way: in mttd q8 the drive motors sat on the limit 77% of teleop and the robot
  *       averaged 1.4 m/s at full stick with the battery never below 9.1 V.
- *       Note the swerve API replaces the drive <i>stator</i> limit with the slip current from
- *       TunerConstants, so only the supply limit is set here.</li>
+ *       Note the swerve API replaces the drive <i>stator</i> limit with the slip current, so the
+ *       stator limit is set through the slip current below.</li>
+ *   <li><b>Drive slip current: 70 A.</b> The swerve API uses this as the drive stator limit. The
+ *       generated 120 A is about twice what the tread can hold (115 lb, COF 1.2, 6.2:1, 2 in wheel
+ *       works out to roughly 65-75 A), so above this the wheel just spins. Placeholder until it is
+ *       measured against a wall in Tuner X. Keep driveCurrentLimit in the PathPlanner settings equal
+ *       to this.</li>
  *   <li><b>Steer limits: 40 A stator, 20 A supply.</b> The generator uses 60 A stator and no supply
  *       limit. Steering needs little torque, so lower limits cost nothing and reduce brownouts.</li>
  * </ul>
@@ -48,6 +53,7 @@ import edu.wpi.first.wpilibj.Alert.AlertType;
 public final class SwerveConfigOverrides {
     public static final SteerFeedbackType kSteerFeedback = SteerFeedbackType.RemoteCANcoder;
     public static final double kDriveSupplyLimitAmps = 35;
+    public static final double kDriveSlipCurrentAmps = 70;
     public static final double kSteerStatorLimitAmps = 40;
     public static final double kSteerSupplyLimitAmps = 20;
 
@@ -75,6 +81,7 @@ public final class SwerveConfigOverrides {
                 steer.CurrentLimits.SupplyCurrentLimitEnable = true;
             }
             module.withFeedbackSource(kSteerFeedback);
+            module.withSlipCurrent(kDriveSlipCurrentAmps);
         }
         return modules;
     }
@@ -150,6 +157,7 @@ public final class SwerveConfigOverrides {
             }
         } else {
             expectAmps(problems, "supply limit", limits.SupplyCurrentLimit, kDriveSupplyLimitAmps);
+            expectAmps(problems, "stator limit", limits.StatorCurrentLimit, kDriveSlipCurrentAmps);
             if (!limits.SupplyCurrentLimitEnable) {
                 problems.add("supply limit disabled");
             }
