@@ -27,8 +27,8 @@ import frc.robot.sim.SimDeviceRegistrar;
 
 public class Feeder extends SubsystemBase {
     public enum Speed {
-        FEED(-4500),
-        OUTTAKE(4500);
+        FEED(-7500),
+        OUTTAKE(7500);
 
         private final double rpm;
 
@@ -58,9 +58,9 @@ public class Feeder extends SubsystemBase {
             )
             .withCurrentLimits(
                 new CurrentLimitsConfigs()
-                    .withStatorCurrentLimit(Amps.of(35))
+                    .withStatorCurrentLimit(Amps.of(40))
                     .withStatorCurrentLimitEnable(true)
-                    .withSupplyCurrentLimit(Amps.of(15))
+                    .withSupplyCurrentLimit(Amps.of(25))
                     .withSupplyCurrentLimitEnable(true)
             )
             .withSlot0(
