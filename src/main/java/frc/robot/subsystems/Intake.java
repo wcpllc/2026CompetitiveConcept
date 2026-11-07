@@ -83,6 +83,17 @@ public class Intake extends SubsystemBase {
     private final MotionMagicVoltage pivotMotionMagicRequest = new MotionMagicVoltage(0).withSlot(0);
     private final VoltageOut rollerVoltageRequest = new VoltageOut(0);
     private Speed currentSpeed = Speed.DEFAULT;
+    private Position currentPosition = null;
+
+    /**
+     * Deployed angle, adjustable from the dashboard (SmartDashboard/Intake/Intake Angle Setpoint) so
+     * the roller height can be tuned to a field's carpet in the pit without a redeploy. Resets to
+     * Position.INTAKE on reboot; copy a value that works into the enum.
+     */
+    private double intakeAngleDegrees = Position.INTAKE.degrees;
+    /** Keeps a typo on the dashboard from driving the pivot past its stops. */
+    private static final double kMinIntakeAngleDegrees = 90.0;
+    private static final double kMaxIntakeAngleDegrees = Position.HOMED.degrees;
 
     private static final double kHomingPercentOutput = 0.1;
     private static final double kHomingCurrentThresholdAmps = 6.0;
@@ -176,9 +187,11 @@ public class Intake extends SubsystemBase {
 
     public void set(Position position) {
         System.out.println("Setting intake position to " + position);
+        currentPosition = position;
+        final Angle angle = position == Position.INTAKE ? Degrees.of(intakeAngleDegrees) : position.angle();
         pivotMotor.setControl(
             pivotMotionMagicRequest
-                .withPosition(position.angle())
+                .withPosition(angle)
         );
         System.out.println("Intake position set");
     }
@@ -267,6 +280,14 @@ public class Intake extends SubsystemBase {
         .withInterruptBehavior(InterruptionBehavior.kCancelSelf);
     }
 
+    private void setIntakeAngleDegrees(double degrees) {
+        intakeAngleDegrees = Math.max(kMinIntakeAngleDegrees, Math.min(kMaxIntakeAngleDegrees, degrees));
+        // Move right away if the intake is already deployed, so the change can be seen.
+        if (currentPosition == Position.INTAKE) {
+            set(Position.INTAKE);
+        }
+    }
+
     @Override
     public void periodic() {
         cachedPivotAngleDeg = pivotMotor.getPosition().getValue().in(Degrees);
@@ -284,6 +305,7 @@ public class Intake extends SubsystemBase {
         // Where the pivot is versus where it was told to go, and whether the rollers actually spin.
         // A stuck intake shows up as angle not following target, or roller RPM near zero with high current.
         Logger.recordOutput("Intake/PivotAngleDegrees", cachedPivotAngleDeg);
+        Logger.recordOutput("Intake/IntakeAngleSetpointDegrees", intakeAngleDegrees);
         Logger.recordOutput("Intake/PivotTargetDegrees", pivotMotionMagicRequest.getPositionMeasure().in(Degrees));
         Logger.recordOutput("Intake/PivotControl", pivotMotor.getAppliedControl().getName());
         Logger.recordOutput("Intake/PivotStatorCurrent", pivotMotor.getStatorCurrent().getValueAsDouble());
@@ -298,6 +320,7 @@ public class Intake extends SubsystemBase {
         builder.addStringProperty("Command", () -> getCurrentCommand() != null ? getCurrentCommand().getName() : "null", null);
         builder.addDoubleProperty("Angle (degrees)", () -> cachedPivotAngleDeg, null);
         builder.addDoubleProperty("RPM", () -> cachedRollerRPM, null);
+        builder.addDoubleProperty("Intake Angle Setpoint", () -> intakeAngleDegrees, this::setIntakeAngleDegrees);
         builder.addDoubleProperty("Pivot Supply Current", () -> cachedPivotSupplyCurrent, null);
         builder.addDoubleProperty("Roller Supply Current", () -> cachedRollerSupplyCurrent, null);
     }
