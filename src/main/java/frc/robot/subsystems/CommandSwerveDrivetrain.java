@@ -50,6 +50,12 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
     private static final double kBumpTiltThresholdDegrees = 5.0;
     private static final double kOdometryUpdateFrequencyHz = 100.0;
     private static final double kTelemetryUpdateFrequencyHz = 20.0;
+    /**
+     * MegaTag2 solves position from the gyro heading we send it, so a good estimate comes back facing
+     * the way the gyro says. One that does not is a bad solve (mttd q8 auto: the Limelight returned
+     * field center facing 0 degrees for 20 frames and pulled the pose 5 m off).
+     */
+    private static final double kMaxVisionHeadingErrorDegrees = 15.0;
     private Notifier m_simNotifier = null;
 
     /* Blue alliance sees forward as 0 degrees (toward red alliance wall) */
@@ -252,7 +258,8 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
                 visionAvgTagDists[i] = est.avgTagDist;
                 visionLatencies[i] = est.latency;
                 
-                if (omega < 3.0 || est.tagCount > 1) {
+                double headingErrorDegrees = Math.abs(est.pose.getRotation().minus(state.Pose.getRotation()).getDegrees());
+                if ((omega < 3.0 || est.tagCount > 1) && headingErrorDegrees < kMaxVisionHeadingErrorDegrees) {
                    //  if (!vision.hasHighSingleTagAmbiguity(est)) {
                          addVisionMeasurement(est.pose, est.timestampSeconds, stdDevs);
                   //  }

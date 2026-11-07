@@ -35,8 +35,10 @@ import edu.wpi.first.wpilibj.Alert.AlertType;
  *   <li><b>Steer feedback: RemoteCANcoder.</b> The generator defaults to FusedCANcoder, which is a
  *       Phoenix Pro feature. This robot is not Pro licensed and the steer config apply is rejected
  *       with UsingProFeatureOnUnlicensedDevice, taking the current limits down with it.</li>
- *   <li><b>Drive supply limit: 20 A.</b> The generator sets no drive limits (factory default is
- *       70 A supply). Four drive motors at 70 A drag the battery below 7 V and brown out the robot.
+ *   <li><b>Drive supply limit: 35 A.</b> The generator sets no drive limits (factory default is
+ *       70 A supply). Four drive motors at 70 A dragged the battery to 6.9 V (mttd p8). 20 A was too
+ *       far the other way: in mttd q8 the drive motors sat on the limit 77% of teleop and the robot
+ *       averaged 1.4 m/s at full stick with the battery never below 9.1 V.
  *       Note the swerve API replaces the drive <i>stator</i> limit with the slip current from
  *       TunerConstants, so only the supply limit is set here.</li>
  *   <li><b>Steer limits: 40 A stator, 20 A supply.</b> The generator uses 60 A stator and no supply
@@ -45,7 +47,7 @@ import edu.wpi.first.wpilibj.Alert.AlertType;
  */
 public final class SwerveConfigOverrides {
     public static final SteerFeedbackType kSteerFeedback = SteerFeedbackType.RemoteCANcoder;
-    public static final double kDriveSupplyLimitAmps = 20;
+    public static final double kDriveSupplyLimitAmps = 35;
     public static final double kSteerStatorLimitAmps = 40;
     public static final double kSteerSupplyLimitAmps = 20;
 
@@ -117,6 +119,11 @@ public final class SwerveConfigOverrides {
     }
 
     private String check(TalonFX motor, boolean isSteer, int encoderId, String label) {
+        // A config read from a motor that is off the bus waits the full timeout and stalls the robot
+        // loop every time. isConnected() only looks at signals already received, so it never blocks.
+        if (!motor.isConnected()) {
+            return label + ": not responding on CAN, config not checked";
+        }
         TalonFXConfiguration cfg = new TalonFXConfiguration();
         StatusCode status = motor.getConfigurator().refresh(cfg, kConfigReadTimeoutSec);
         if (!status.isOK()) {
