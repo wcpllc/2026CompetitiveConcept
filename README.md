@@ -7,6 +7,9 @@ The project is based on one of CTRE's [Phoenix 6 example projects](https://githu
 **Troubleshooting**
 If the robot is misbehaving, start with [Reading a Drivetrain Log](docs/drivetrain-log-guide.md). It explains how to pull a log off the robot and use it to find which part is at fault.
 
+**Recalibrating the swerve in Tuner X**
+`src/main/java/frc/robot/generated/TunerConstants.java` is a generated file. After running the Tuner X swerve generator, copy the new file over it whole. Do not hand-edit it. The team's own settings (steer feedback type and current limits) live in `SwerveConfigOverrides.java` and are applied on top of the generated file automatically. After deploying, keep the robot disabled for a few seconds and check the dashboard: a red "Swerve config NOT applied" alert means the motors are not running the team's settings. Power cycle the robot and redeploy before driving.
+
 **Simulation**
 We use [MapleSim](https://github.com/Shenzhen-Robotics-Alliance/maple-sim) with [AdvantageScope](https://docs.advantagescope.org/) for simulation.
 Using xbox controller to control in the simulation

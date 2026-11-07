@@ -77,14 +77,17 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
     private final StatusSignal<Angle> rollSignal;
     /** Per-module currents, temperatures, encoder health, and faults. See docs/drivetrain-log-guide.md. */
     private final SwerveModuleDiagnostics moduleDiagnostics;
+    /** Team settings layered over the generated TunerConstants, plus a check that they reached the motors. */
+    private final SwerveConfigOverrides configOverrides;
 
     public CommandSwerveDrivetrain(SwerveDrivetrainConstants drivetrainConstants,
         SwerveModuleConstants<?, ?, ?>... modules) {
-        super(drivetrainConstants, kOdometryUpdateFrequencyHz, modules);
+        super(drivetrainConstants, kOdometryUpdateFrequencyHz, SwerveConfigOverrides.apply(modules));
 
         pitchSignal = getPigeon2().getPitch();
         rollSignal = getPigeon2().getRoll();
         moduleDiagnostics = new SwerveModuleDiagnostics(getModules());
+        configOverrides = new SwerveConfigOverrides(getModules());
 
         BaseStatusSignal.setUpdateFrequencyForAll(kTelemetryUpdateFrequencyHz, pitchSignal, rollSignal);
         BaseStatusSignal.refreshAll(pitchSignal, rollSignal);
@@ -293,6 +296,10 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
         Logger.recordOutput("Drive/OnBump", isRobotOnBump());
 
         moduleDiagnostics.logPeriodic();
+        if (DriverStation.isDisabled()) {
+            // Reads configs back over CAN, so only while disabled to avoid blocking the drive loop.
+            configOverrides.verifyPeriodic();
+        }
         
         Logger.recordOutput("BatteryVoltage", RobotController.getBatteryVoltage());
         Logger.recordOutput("Drive/TargetStates", getState().ModuleTargets);

@@ -94,6 +94,14 @@ left near the end of practice," go to the last minute of teleop.
 to find which one, then read its `Faults` text. That often answers the question outright.
 The dashboard shows the same thing as a red alert while the robot is on.
 
+There is one more red alert to know about: **"Swerve config NOT applied"**. While the robot is
+disabled, the code reads each swerve motor's settings back and compares them to what the team
+expects (steer feedback type and current limits). If they differ, this alert lists which motor and
+which setting. It means the wrong `TunerConstants.java` was deployed, a Tuner X session rewrote the
+motors, or a config failed to apply at boot. Power cycle and redeploy before driving. In the log,
+`Drive/Config/Verified` is true once every motor has checked out and `Drive/Config/Mismatches`
+holds the same text as the alert.
+
 **Step 2. Put the same number from all four modules on one graph.** For example, drag
 `Drive/SupplyCurrentAmps` from all four module folders onto the line graph. Three lines will
 look alike and one will not. That is your module.
