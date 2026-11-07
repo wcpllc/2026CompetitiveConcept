@@ -17,10 +17,10 @@ import org.littletonrobotics.junction.Logger;
 
 import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix6.swerve.SwerveRequest;
-import com.pathplanner.lib.auto.AutoBuilder;
-import com.pathplanner.lib.auto.NamedCommands;
-import com.pathplanner.lib.commands.PathPlannerAuto;
-import com.pathplanner.lib.util.FlippingUtil;
+
+// BLine-Lib Imports for Autonomous and Named Commands
+import frc.robot.lib.BLine.FollowPath;
+import frc.robot.Autos;
 
 import edu.wpi.first.math.filter.SlewRateLimiter;
 import edu.wpi.first.math.geometry.Pose2d;
@@ -60,10 +60,7 @@ import frc.robot.subsystems.VisionSubsystem;
 import frc.robot.subsystems.Hanger.Position;
 import frc.robot.subsystems.Intake.Speed;
 
-import com.pathplanner.lib.auto.AutoBuilder;
-import com.pathplanner.lib.auto.NamedCommands;
 import org.littletonrobotics.junction.Logger;
-
 
 /**
  * This class is where the bulk of the robot should be declared. Since Command-based is a
@@ -129,7 +126,7 @@ public class RobotContainer {
 
     private ManualDriveCommand manualDriveCommand;
 
-    private SendableChooser<Command> autoChooser;
+    private Autos autos;
     
     /** The container for the robot. Contains subsystems, OI devices, and commands. */
     public RobotContainer() {
@@ -177,23 +174,18 @@ public class RobotContainer {
     }
 
     private void configureAutonomous() {
-        NamedCommands.registerCommand("Intake", intake.intakeCommand());
-        NamedCommands.registerCommand("Aim and Shoot", subsystemCommands.aimAndShoot());
-        NamedCommands.registerCommand("Shoot Manually", subsystemCommands.shootManually());
-        NamedCommands.registerCommand("Shoot Manual with Shot Table", subsystemCommands.shootManualWithShotTable());
-        // Extend the hanger (hooks) to be able to reach the L1 bar
-        NamedCommands.registerCommand("Hanger Extend Command", hanger.positionCommand(Hanger.Position.HANGER_EXTEND));
-        // Retract the hanger to hook onto the L1 bar
-        NamedCommands.registerCommand("Hanger Hook Command", hanger.positionCommand(Hanger.Position.HANGER_HOME));
+        FollowPath.registerEventTrigger("Intake", intake.intakeCommand());
+        FollowPath.registerEventTrigger("Aim and Shoot", subsystemCommands.aimAndShoot());
+        FollowPath.registerEventTrigger("Shoot Manually", subsystemCommands.shootManually());
+        FollowPath.registerEventTrigger("Shoot Manual with Shot Table", subsystemCommands.shootManualWithShotTable());
+        FollowPath.registerEventTrigger("Hanger Extend Command", hanger.positionCommand(Hanger.Position.HANGER_EXTEND));
+        FollowPath.registerEventTrigger("Hanger Hook Command", hanger.positionCommand(Hanger.Position.HANGER_HOME));
+        FollowPath.registerEventTrigger("Set Hood to 0.3", hood.positionCommand(0.3));
+        FollowPath.registerEventTrigger("Set Hood to 0.5", hood.positionCommand(0.5));
+        FollowPath.registerEventTrigger("Shoot Manual For Shoot Auto", subsystemCommands.shootManualForShootAuto());
+        FollowPath.registerEventTrigger("Extend Hopper", hanger.positionCommand(Hanger.Position.EXTEND_HOPPER));
 
-        NamedCommands.registerCommand("Set Hood to 0.3", hood.positionCommand(0.3));
-        NamedCommands.registerCommand("Set Hood to 0.5", hood.positionCommand(0.5));
-        NamedCommands.registerCommand("Shoot Manual For Shoot Auto", subsystemCommands.shootManualForShootAuto());
-        NamedCommands.registerCommand("Extend Hopper", hanger.positionCommand(Hanger.Position.EXTEND_HOPPER)
-                                                                .alongWith(Commands.print("====Setting Hanger to EXTEND HOPPER")));
-
-        autoChooser = AutoBuilder.buildAutoChooser("Left Neutral Stage Auto");
-        SmartDashboard.putData("Auto Mode", autoChooser);
+        autos = new Autos(swerve);
     }
 
     private void configureFuelSim() {
@@ -296,7 +288,7 @@ public class RobotContainer {
     }
 
     public Command getAutonomousCommand() {
-        Command selected = autoChooser.getSelected();
+        Command selected = autos.getAutonomousCommand();
         if (selected == null) {
             DriverStation.reportWarning("No autonomous command selected", false);
             return Commands.none();
@@ -305,51 +297,18 @@ public class RobotContainer {
     }
 
     public String getSelectedAutoName() {
-        return SmartDashboard.getString("Auto Mode/selected", "Left Neutral Stage Auto");
+        return SmartDashboard.getString("Auto Mode/selected", "None");
     }
 
     public void resetPositionForAuto() {
-    if (autoChooser.getSelected() instanceof PathPlannerAuto auto) {
-      Pose2d startingPose = auto.getStartingPose();
-      if (startingPose == null) {
-        if (getSelectedAutoName().equals("sideMiddleShoot")) {
-            startingPose = new Pose2d(3.503, 5.518, Rotation2d.kZero);
-        }
-        else if (getSelectedAutoName().equals("sideMiddleShootReflected")) {
-            startingPose = new Pose2d(3.503, 2.082, Rotation2d.kZero);
-        }       
+      Pose2d startingPose = autos.getAutonomousStartPose();
+      if (startingPose != null) {
+          swerve.resetPose(startingPose);
       }
-
-      if (getSelectedAutoName().equals("Shoot Climb Auto")) {
-        startingPose = new Pose2d(3.500, 3.776, Rotation2d.kZero);
-      }
-
-      if (DriverStation.getAlliance().isPresent()
-          && DriverStation.getAlliance().get() == DriverStation.Alliance.Red && startingPose != null) {
-        startingPose = FlippingUtil.flipFieldPose(startingPose);
-      }
-
-      swerve.resetPose(startingPose);
     }
-  }
     
-    /**
-     * Use this method to define your trigger->command mappings. Triggers can be created via the
-     * {@link Trigger#Trigger(java.util.function.BooleanSupplier)} constructor with an arbitrary
-     * predicate, or via the named factories in {@link
-     * edu.wpi.first.wpilibj2.command.button.CommandGenericHID}'s subclasses for {@link
-     * CommandXboxController Xbox}/{@link edu.wpi.first.wpilibj2.command.button.CommandPS4Controller
-     * PS4} controllers or {@link edu.wpi.first.wpilibj2.command.button.CommandJoystick Flight
-     * joysticks}.
-     */
     private void configureBindings() {
         configureManualDriveBindings();
-
-        //RobotModeTriggers.autonomous().or(RobotModeTriggers.teleop()).onTrue(shooter.spinUpCommand(0.75*shooter.getDashboardRPM()));
-
-        // RobotModeTriggers.teleop()
-        // //    .onTrue(intake.homingCommand());
-        // .onTrue(hanger.positionCommand(Hanger.Position.EXTEND_HOPPER));
 
         driverLeftTrigger().whileTrue(intake.intakeCommand());
         driverLeftBumper().onTrue(intake.runOnce(() -> intake.set(Intake.Position.STOWED)));
@@ -358,29 +317,22 @@ public class RobotContainer {
         driverRightBumper().whileTrue(subsystemCommands.shootManualWithShotTable());
         driver.start().whileTrue(subsystemCommands.shootManually());
 
-        //driverLeftStickButton().onTrue(subsystemCommands.autoAlignClimbCommand());
-
         driverPovUp().onTrue(hanger.climbCommand());
         driverPovDown().onTrue(hanger.unclimbCommand());
-        //driverPovLeft().whileTrue(subsystemCommands.autoAim());
         driverRightStickButton().whileTrue(subsystemCommands.lockWheels());
 
         driverLeftStickButton().whileTrue(intake.outtakeCommand());
 
-        //Hood Bindings - Need to tune
         driver.b().onTrue(
             hood.positionCommand(0.4).alongWith(Commands.runOnce(() -> shooter.setDashboardRPM(3750)))
-        ); //middle
+        ); 
         driver.a().onTrue(hood.positionCommand(0.1).alongWith(Commands.runOnce(() -> shooter.setDashboardRPM(3000)))
-        ); //minimum
+        ); 
         driver.y().onTrue(hood.positionCommand(0.7).alongWith(Commands.runOnce(() -> shooter.setDashboardRPM(3900)))
-        ); //maximum
+        ); 
         driver.x().onTrue(
             hood.positionCommand(0.4).alongWith(Commands.runOnce(() -> shooter.setDashboardRPM(3550)))
-        ); //from the trench
-
-        // Reset rotation to 0
-        //driver.x().onTrue(Commands.runOnce(() -> swerve.zeroHeading()));
+        ); 
     }
 
     private void configureSimBindings() {
@@ -419,7 +371,7 @@ public class RobotContainer {
                     return robotCentricDrive.withVelocityX(robotX).withVelocityY(robotY).withRotationalRate(robotRotate);
                 }
             }));
-        // Mirror driver-facing bindings on the sim joystick so the same features exist in sim.
+
         simButton(Constants.SimControllerButtons.kAutoAim)
             .or(driverRightStickButton())
             .whileTrue(simSubsystemCommands.autoAim());
@@ -584,6 +536,6 @@ public class RobotContainer {
     }
 
     public void autonomousInit() {
-        Logger.recordOutput("Auto/CurrentAuto", autoChooser.getSelected().getName());
+        Logger.recordOutput("Auto/CurrentAuto", autos.getSelectedAutoName());
     }
 }

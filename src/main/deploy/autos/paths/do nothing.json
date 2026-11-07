@@ -1,0 +1,14 @@
+{
+  "path_elements": [
+    {"type":"waypoint","translation_target":{"x_meters":0.0,"y_meters":0.0},"rotation_target":{"rotation_radians":0.0,"t_ratio":0.5}},
+    {"type":"waypoint","translation_target":{"x_meters":0.0,"y_meters":0.0},"rotation_target":{"rotation_radians":0.0,"t_ratio":0.5}}
+  ],
+  "constraints": {
+    "max_velocity_meters_per_sec":3.0,
+    "max_acceleration_meters_per_sec2":2.0,
+    "max_velocity_deg_per_sec":540.0,
+    "max_acceleration_deg_per_sec2":720.0,
+    "end_translation_tolerance_meters":0.05,
+    "end_rotation_tolerance_deg":2.0
+  }
+}
