@@ -173,7 +173,7 @@ public class Autos {
   public static final List<AutoRoutine> AUTO_ROUTINES =
       List.of(
           new AutoRoutine(
-              false,
+              true,
               "MadTown-auto",
               List.of("ShootPreload")));
               
