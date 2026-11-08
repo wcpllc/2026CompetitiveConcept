@@ -15,13 +15,12 @@ import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix6.swerve.SwerveDrivetrainConstants;
 import com.ctre.phoenix6.swerve.SwerveModuleConstants;
 import com.ctre.phoenix6.swerve.SwerveRequest;
-
-// BLine-Lib Imports
-import frc.robot.lib.BLine.FollowPath;
-import frc.robot.lib.BLine.Path;
+import com.pathplanner.lib.auto.AutoBuilder;
+import com.pathplanner.lib.config.PIDConstants;
+import com.pathplanner.lib.config.RobotConfig;
+import com.pathplanner.lib.controllers.PPHolonomicDriveController;
 
 import edu.wpi.first.math.Matrix;
-import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -40,6 +39,11 @@ import frc.robot.generated.TunerConstants.TunerSwerveDrivetrain;
 import frc.robot.LimelightHelpers;
 import frc.robot.utils.simulation.MapleSimSwerveDrivetrain;
 import frc.robot.utils.simulation.SimSwerveConstants;
+
+import com.pathplanner.lib.config.ModuleConfig;
+import com.pathplanner.lib.config.RobotConfig;
+import edu.wpi.first.math.system.plant.DCMotor;
+import edu.wpi.first.math.geometry.Translation2d;
 
 public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Subsystem {
     private static final double kSimLoopPeriod = 0.004; // 4 ms
@@ -82,9 +86,6 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
     /** Team settings layered over the generated TunerConstants, plus a check that they reached the motors. */
     private final SwerveConfigOverrides configOverrides;
 
-    // BLine Path Follower Builder
-    private final FollowPath.Builder pathBuilder;
-
     public CommandSwerveDrivetrain(SwerveDrivetrainConstants drivetrainConstants,
         SwerveModuleConstants<?, ?, ?>... modules) {
         super(drivetrainConstants, kOdometryUpdateFrequencyHz, SwerveConfigOverrides.apply(modules));
@@ -97,18 +98,7 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
         BaseStatusSignal.setUpdateFrequencyForAll(kTelemetryUpdateFrequencyHz, pitchSignal, rollSignal);
         BaseStatusSignal.refreshAll(pitchSignal, rollSignal);
 
-        // Initialize BLine FollowPath Builder
-        pathBuilder = new FollowPath.Builder(
-            this,                                                   // Subsystem requirement
-            this::getPose,                                          // Field-relative Pose2d supplier
-            () -> getState().Speeds,                                // Robot-relative ChassisSpeeds supplier
-            speeds -> setControl(pathApplyRobotSpeeds.withSpeeds(speeds)), // Robot-relative speed consumer
-            new PIDController(10.0, 0.0, 0.0),                      // Translation PID
-            new PIDController(7.0, 0.0, 0.0),                       // Rotation PID
-            new PIDController(2.0, 0.0, 0.0)                        // Cross-track PID
-        ).withDefaultShouldFlip()
-         .withTRatioBasedTranslationHandoffs(true);
-
+        configureAutoBuilder();
         if (Utils.isSimulation()) {
             startSimThread();
         }
@@ -138,21 +128,36 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
         setControl(idleRequest);
     }
 
-    /**
-     * Builds and returns a BLine path-following command for the given path file in deploy/autos/paths/
-     * 
-     * @param pathName The name of the path file (without .json extension)
-     * @return Command to follow the path
-     */
-    public Command followPath(String pathName) {
-        Path path = new Path(pathName);
-        Command cmd = pathBuilder
-            .withPoseReset(this::resetPose)
-            .build(path);
-        // Clear pose reset so subsequent path segments in a multi-path routine don't reset pose again
-        pathBuilder.withPoseReset(ignored -> {});
-        return cmd;
+    private void configureAutoBuilder() {
+    try {
+      var config = RobotConfig.fromGUISettings();
+      AutoBuilder.configure(
+          () -> getState().Pose, // Supplier of current robot pose
+          this::resetPose, // Consumer for seeding pose against auto
+          () -> getState().Speeds, // Supplier of current robot speeds
+          // Consumer of ChassisSpeeds and feedforwards to drive the robot
+          (speeds, feedforwards) ->
+              setControl(
+                  pathApplyRobotSpeeds
+                      .withSpeeds(speeds)
+                      .withWheelForceFeedforwardsX(feedforwards.robotRelativeForcesXNewtons())
+                      .withWheelForceFeedforwardsY(feedforwards.robotRelativeForcesYNewtons())),
+          new PPHolonomicDriveController(
+              // PID constants for translation
+              new PIDConstants(10, 0, 0),
+              // PID constants for rotation
+              new PIDConstants(7, 0, 0)),
+          config,
+          // Assume the path needs to be flipped for Red vs Blue, this is normally the
+          // case
+          () -> DriverStation.getAlliance().orElse(Alliance.Blue) == Alliance.Red,
+          this // Subsystem for requirements
+          );
+    } catch (Exception ex) {
+      DriverStation.reportError(
+          "Failed to load PathPlanner config and configure AutoBuilder", ex.getStackTrace());
     }
+  }
 
     /**
      * Returns a command that applies the specified control request to this swerve drivetrain.
@@ -202,6 +207,13 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
 
     @Override
     public void periodic() {
+        /*
+         * Periodically try to apply the operator perspective.
+         * If we haven't applied the operator perspective before, then we should apply it regardless of DS state.
+         * This allows us to correct the perspective in case the robot code restarts mid-match.
+         * Otherwise, only check and apply the operator perspective if the DS is disabled.
+         * This ensures driving behavior doesn't change until an explicit disable event occurs during testing.
+         */
         if (!m_hasAppliedOperatorPerspective || DriverStation.isDisabled()) {
             DriverStation.getAlliance().ifPresent(allianceColor -> {
                 setOperatorPerspectiveForward(
@@ -220,6 +232,7 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
         if (vision != null) {
             double omega = Math.abs(state.Speeds.omegaRadiansPerSecond);
             double gyroYawDegrees = state.Pose.getRotation().getDegrees();
+            // MegaTag2 requires the robot's gyro orientation to compute pose
             LimelightHelpers.SetRobotOrientation("limelight-shooter", gyroYawDegrees, 0, 0, 0, 0, 0);
             List<LimelightHelpers.PoseEstimate> estimates = vision.getAllPoseEstimates();
 
@@ -245,9 +258,11 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
                 visionAvgTagDists[i] = est.avgTagDist;
                 visionLatencies[i] = est.latency;
                 
-double headingErrorDegrees = Math.abs(est.pose.getRotation().minus(state.Pose.getRotation()).getDegrees());
+                double headingErrorDegrees = Math.abs(est.pose.getRotation().minus(state.Pose.getRotation()).getDegrees());
                 if ((omega < 3.0 || est.tagCount > 1) && headingErrorDegrees < kMaxVisionHeadingErrorDegrees) {
-                    addVisionMeasurement(est.pose, est.timestampSeconds, stdDevs);
+                   //  if (!vision.hasHighSingleTagAmbiguity(est)) {
+                         addVisionMeasurement(est.pose, est.timestampSeconds, stdDevs);
+                  //  }
                 }
              }
 
@@ -257,6 +272,16 @@ double headingErrorDegrees = Math.abs(est.pose.getRotation().minus(state.Pose.ge
             Logger.recordOutput("Vision/TagCounts", visionTagCounts);
             Logger.recordOutput("Vision/AvgTagDists", visionAvgTagDists);
             Logger.recordOutput("Vision/Latencies", visionLatencies);
+
+            //Log heading disagreement between vision and odometry for quick diagnosis
+            // if (!estimates.isEmpty()) {
+            //     Pose2d bestVisionPose = estimates.get(0).pose;
+            //     Pose2d odomPose = getState().Pose;
+            //     double headingErrorDeg = bestVisionPose.getRotation().minus(odomPose.getRotation()).getDegrees();
+            //     double translationErrorM = bestVisionPose.getTranslation().getDistance(odomPose.getTranslation());
+            //     Logger.recordOutput("Vision/HeadingErrorDeg", headingErrorDeg);
+            //     Logger.recordOutput("Vision/TranslationErrorM", translationErrorM);
+            // }
         }
 
         if (mapleSimSwerveDrivetrain != null) {
@@ -266,6 +291,7 @@ double headingErrorDegrees = Math.abs(est.pose.getRotation().minus(state.Pose.ge
         } else {
             Logger.recordOutput("Drive/Pose", state.Pose);
         }
+
 
         Logger.recordOutput("Drive/Pose3d", getPose3d());
         Logger.recordOutput("Drive/X", state.Pose.getX());
@@ -278,6 +304,7 @@ double headingErrorDegrees = Math.abs(est.pose.getRotation().minus(state.Pose.ge
 
         moduleDiagnostics.logPeriodic();
         if (DriverStation.isDisabled()) {
+            // Reads configs back over CAN, so only while disabled to avoid blocking the drive loop.
             configOverrides.verifyPeriodic();
         }
         
@@ -343,17 +370,19 @@ double headingErrorDegrees = Math.abs(est.pose.getRotation().minus(state.Pose.ge
             TunerConstants.FrontRight,
             TunerConstants.BackLeft,
             TunerConstants.BackRight);
+    /* Run simulation at a faster rate so PID gains behave more reasonably */
+    m_simNotifier = new Notifier(mapleSimSwerveDrivetrain::update);
+    m_simNotifier.startPeriodic(kSimLoopPeriod);
+    
+    // Initialize simulation pose to inside the field on black line for blue alliance
+    double blueAllianceInitialSimX = 3.586;
+    double blueAllianceInitialSimY = 5.779;
 
-        m_simNotifier = new Notifier(mapleSimSwerveDrivetrain::update);
-        m_simNotifier.startPeriodic(kSimLoopPeriod);
-        
-        double blueAllianceInitialSimX = 3.586;
-        double blueAllianceInitialSimY = 5.779;
-
-        Pose2d initialSimPose = new Pose2d(blueAllianceInitialSimX, blueAllianceInitialSimY, new Rotation2d(3.121));
-        mapleSimSwerveDrivetrain.mapleSimDrive.setSimulationWorldPose(initialSimPose);
-        super.resetPose(initialSimPose);
+    Pose2d initialSimPose = new Pose2d(blueAllianceInitialSimX, blueAllianceInitialSimY, new Rotation2d(3.121));
+    mapleSimSwerveDrivetrain.mapleSimDrive.setSimulationWorldPose(initialSimPose);
+    super.resetPose(initialSimPose);
     }
+
 
     public Command lockWheelsCommand() {
         return run(() -> setControl(lockWheelsRequest));
@@ -362,17 +391,38 @@ double headingErrorDegrees = Math.abs(est.pose.getRotation().minus(state.Pose.ge
     @Override
     public void resetPose(Pose2d pose) {
         if (this.mapleSimSwerveDrivetrain != null) {
-            mapleSimSwerveDrivetrain.mapleSimDrive.setSimulationWorldPose(pose);
-            mapleSimSwerveDrivetrain.update();
+        mapleSimSwerveDrivetrain.mapleSimDrive.setSimulationWorldPose(pose);
+        // Push one sim update instead of blocking the main loop for 0.1s
+        mapleSimSwerveDrivetrain.update();
         }
         super.resetPose(pose);
     }
 
+    /**
+     * Adds a vision measurement to the Kalman Filter. This will correct the odometry pose estimate
+     * while still accounting for measurement noise.
+     *
+     * @param visionRobotPoseMeters The pose of the robot as measured by the vision camera.
+     * @param timestampSeconds The timestamp of the vision measurement in seconds.
+     */
     @Override
     public void addVisionMeasurement(Pose2d visionRobotPoseMeters, double timestampSeconds) {
         super.addVisionMeasurement(visionRobotPoseMeters, Utils.fpgaToCurrentTime(timestampSeconds));
     }
 
+    /**
+     * Adds a vision measurement to the Kalman Filter. This will correct the odometry pose estimate
+     * while still accounting for measurement noise.
+     * <p>
+     * Note that the vision measurement standard deviations passed into this method
+     * will continue to apply to future measurements until a subsequent call to
+     * {@link #setVisionMeasurementStdDevs(Matrix)} or this method.
+     *
+     * @param visionRobotPoseMeters The pose of the robot as measured by the vision camera.
+     * @param timestampSeconds The timestamp of the vision measurement in seconds.
+     * @param visionMeasurementStdDevs Standard deviations of the vision pose measurement
+     *     in the form [x, y, theta]t, with units in meters and radians.
+     */
     @Override
     public void addVisionMeasurement(
         Pose2d visionRobotPoseMeters,

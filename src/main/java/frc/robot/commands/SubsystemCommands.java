@@ -5,16 +5,7 @@ import java.util.function.DoubleSupplier;
 
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
-
-// BLine-Lib path following imports
-import frc.robot.lib.BLine.FollowPath;
-import frc.robot.lib.BLine.Path;
-import frc.robot.lib.BLine.Path.Waypoint;
-import edu.wpi.first.math.controller.PIDController;
-import edu.wpi.first.math.geometry.Pose2d;
-import edu.wpi.first.math.kinematics.ChassisSpeeds;
-import com.ctre.phoenix6.swerve.SwerveRequest;
-
+import com.pathplanner.lib.auto.AutoBuilder;
 import frc.robot.Constants;
 import frc.robot.Landmarks;
 import frc.robot.subsystems.CommandSwerveDrivetrain;
@@ -24,6 +15,7 @@ import frc.robot.subsystems.Hanger;
 import frc.robot.subsystems.Hood;
 import frc.robot.subsystems.Intake;
 import frc.robot.subsystems.Shooter;
+import frc.robot.subsystems.CommandSwerveDrivetrain;
 
 public final class SubsystemCommands {
     private final CommandSwerveDrivetrain swerve;
@@ -106,6 +98,14 @@ public final class SubsystemCommands {
         return swerve.lockWheelsCommand();
     }
 
+    // public Command outtake() {
+    //     System.out.println("===Outtake Command");
+    //     return Commands.parallel(
+    //         intake.outtakeCommand(),
+    //         feeder.outtakeCommand()
+    //     );
+    // }
+
     public Command shootManually() {
         System.out.println("========Shooting Manually=========");
         return
@@ -146,29 +146,14 @@ public final class SubsystemCommands {
     public Command autoAlignClimbCommand() {
         System.out.println("=========Auto Align Climbing=========");
         return Commands.defer(
-            () -> {
-                Pose2d current = swerve.getPose();
-                Pose2d goal = Landmarks.climbPose();
-                Path path = new Path(
-                    Constants.ClimbAlignment.kPathConstraints,
-                    new Waypoint(current),
-                    new Waypoint(goal));
-                SwerveRequest.ApplyRobotSpeeds request = new SwerveRequest.ApplyRobotSpeeds();
-                return new FollowPath.Builder(
-                    swerve,
-                    swerve::getPose,
-                    () -> swerve.getState().Speeds,
-                    speeds -> swerve.setControl(request.withSpeeds(speeds)),
-                    new PIDController(5.0, 0.0, 0.0),
-                    new PIDController(3.0, 0.0, 0.0),
-                    new PIDController(2.0, 0.0, 0.0))
-                    .withDefaultShouldFlip()
-                    .build(path);
-            },
+            () -> AutoBuilder.pathfindToPose(
+                Landmarks.climbPose(),
+                Constants.ClimbAlignment.kPathConstraints,
+                Constants.ClimbAlignment.kGoalEndVelocityMetersPerSecond
+            ),
             Set.of(swerve)
         );
     }
-
     private Command feed() {
         System.out.println("=========Feed========");
         return Commands.sequence(
