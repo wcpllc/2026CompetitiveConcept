@@ -321,7 +321,7 @@ public class RobotContainer {
         driverPovDown().onTrue(hanger.unclimbCommand());
         driverRightStickButton().whileTrue(subsystemCommands.lockWheels());
 
-        driverLeftStickButton().onTrue(intake.outtakeCommand(driverLeftStickButton()));
+        driverLeftStickButton().whileTrue(intake.outtakeCommand());
 
         driver.b().onTrue(
             hood.positionCommand(0.4).alongWith(Commands.runOnce(() -> shooter.setDashboardRPM(3750)))

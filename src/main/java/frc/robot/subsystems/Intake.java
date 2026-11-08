@@ -41,8 +41,8 @@ import frc.robot.sim.SimDeviceRegistrar;
 public class Intake extends SubsystemBase {
     public enum Speed {
         DEFAULT(0),
-        INTAKE(0.98),
-        OUTTAKE(-0.98);
+        INTAKE(0.9),
+        OUTTAKE(-0.9);
 
         private final double percentOutput;
 
@@ -94,13 +94,6 @@ public class Intake extends SubsystemBase {
     /** Keeps a typo on the dashboard from driving the pivot past its stops. */
     private static final double kMinIntakeAngleDegrees = 90.0;
     private static final double kMaxIntakeAngleDegrees = Position.HOMED.degrees;
-
-    /**
-     * Shortest outtake, even if the button is only tapped. The roller needs about half a second to
-     * reverse with a ball on it; in mttd q51 the driver's taps averaged 0.3 s and the roller never got
-     * past ~1400 RPM backward, so the jams did not clear.
-     */
-    private static final double kMinOuttakeSeconds = 0.75;
 
     private static final double kHomingPercentOutput = 0.1;
     private static final double kHomingCurrentThresholdAmps = 6.0;
@@ -171,9 +164,9 @@ public class Intake extends SubsystemBase {
             )
             .withCurrentLimits(
                 new CurrentLimitsConfigs()
-                    .withStatorCurrentLimit(Amps.of(50))
+                    .withStatorCurrentLimit(Amps.of(35))
                     .withStatorCurrentLimitEnable(true)
-                    .withSupplyCurrentLimit(Amps.of(40))
+                    .withSupplyCurrentLimit(Amps.of(20))
                     .withSupplyCurrentLimitEnable(true)
             );
         rollerMotor.getConfigurator().apply(config);
@@ -232,11 +225,7 @@ public class Intake extends SubsystemBase {
         );
     }
 
-    /**
-     * Reverses the rollers while {@code held} is true, and for at least {@link #kMinOuttakeSeconds}
-     * after it starts. Bind with onTrue, not whileTrue, or a short tap still cancels it early.
-     */
-    public Command outtakeCommand(BooleanSupplier held) {
+    public Command outtakeCommand() {
         System.out.println("========Outtake Command");
         return startEnd(
             () -> {
@@ -247,9 +236,6 @@ public class Intake extends SubsystemBase {
                 System.out.println("Stopping Outtake");
                 set(Speed.DEFAULT);
             }
-        ).withDeadline(
-            Commands.waitSeconds(kMinOuttakeSeconds)
-                .andThen(Commands.waitUntil(() -> !held.getAsBoolean()))
         );
     }
 
