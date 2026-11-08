@@ -37,7 +37,7 @@ public class Shooter extends SubsystemBase {
     private final VelocityVoltage velocityRequest = new VelocityVoltage(0).withSlot(0);
     private final VoltageOut voltageRequest = new VoltageOut(0);
 
-    private double dashboardTargetRPM = 3750.0;
+    private double dashboardTargetRPM = 3500.0;
 
     private double cachedLeftRPM, cachedMiddleRPM, cachedRightRPM;
     private double cachedLeftStatorCurrent, cachedMiddleStatorCurrent, cachedRightStatorCurrent;
