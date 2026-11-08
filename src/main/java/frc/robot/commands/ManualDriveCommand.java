@@ -12,9 +12,12 @@ import com.ctre.phoenix6.swerve.SwerveRequest.ForwardPerspectiveValue;
 
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.units.measure.Time;
+import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import org.littletonrobotics.junction.Logger;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.Constants.Driving;
-import frc.robot.subsystems.Swerve;
+import frc.robot.subsystems.CommandSwerveDrivetrain;
 import frc.util.DriveInputSmoother;
 import frc.util.ManualDriveInput;
 import frc.util.Stopwatch;
@@ -35,7 +38,7 @@ public class ManualDriveCommand extends Command {
 
     private static final Time kHeadingLockDelay = Seconds.of(0.25); // time to wait before locking heading
 
-    private final Swerve swerve;
+    private final CommandSwerveDrivetrain swerve;
     private final DriveInputSmoother inputSmoother;
     private final SwerveRequest.Idle idleRequest = new SwerveRequest.Idle();
 
@@ -52,13 +55,18 @@ public class ManualDriveCommand extends Command {
         .withForwardPerspective(ForwardPerspectiveValue.OperatorPerspective)
         .withHeadingPID(5, 0, 0);
 
+    private final SwerveRequest.RobotCentric robotCentricRequest = new SwerveRequest.RobotCentric()
+        .withDriveRequestType(DriveRequestType.OpenLoopVoltage)
+        .withSteerRequestType(SteerRequestType.MotionMagicExpo);
+
     private State currentState = State.IDLING;
     private Optional<Rotation2d> lockedHeading = Optional.empty();
     private Stopwatch headingLockStopwatch = new Stopwatch();
     private ManualDriveInput previousInput = new ManualDriveInput();
+    private boolean robotCentricMode = false;
 
     public ManualDriveCommand(
-        Swerve swerve,
+        CommandSwerveDrivetrain swerve,
         DoubleSupplier forwardInput,
         DoubleSupplier leftInput,
         DoubleSupplier rotationInput
@@ -66,6 +74,7 @@ public class ManualDriveCommand extends Command {
         this.swerve = swerve;
         this.inputSmoother = new DriveInputSmoother(forwardInput, leftInput, rotationInput);
         addRequirements(swerve);
+        SmartDashboard.putBoolean("Drive/RobotCentricMode", robotCentricMode);
     }
 
     public void seedFieldCentric() {
@@ -78,9 +87,32 @@ public class ManualDriveCommand extends Command {
         currentState = State.DRIVING_WITH_LOCKED_HEADING;
     }
 
+    public void toggleRobotCentricMode() {
+        setRobotCentricMode(!robotCentricMode);
+    }
+
+    public void setRobotCentricMode(boolean enabled) {
+        if (robotCentricMode == enabled) {
+            return;
+        }
+        robotCentricMode = enabled;
+        if (!robotCentricMode) {
+            lockedHeading = Optional.empty();
+        }
+        DriverStation.reportWarning(
+            "Drive mode: " + (robotCentricMode ? "Robot-Centric" : "Field-Centric"),
+            false
+        );
+        SmartDashboard.putBoolean("Drive/RobotCentricMode", robotCentricMode);
+    }
+
+    public boolean isRobotCentricModeEnabled() {
+        return robotCentricMode;
+    }
+
     private void setLockedHeadingToCurrent() {
         final Rotation2d headingInBlueAlliancePerspective = swerve.getState().Pose.getRotation();
-        final Rotation2d headingInOperatorPerspective = headingInBlueAlliancePerspective.rotateBy(swerve.getOperatorForwardDirection());
+        final Rotation2d headingInOperatorPerspective = headingInBlueAlliancePerspective.minus(swerve.getOperatorForwardDirection());
         setLockedHeading(headingInOperatorPerspective);
     }
 
@@ -104,9 +136,35 @@ public class ManualDriveCommand extends Command {
         previousInput = new ManualDriveInput();
     }
 
+    /**
+     * Records the driver's processed stick input and this command's state. AdvantageKit already logs
+     * the raw controller axes under DriverStation/Joystick0, so with these two together you can see
+     * whether a bad drive request came from the controller or from this code.
+     */
+    private void logInput(ManualDriveInput input) {
+        Logger.recordOutput("Drive/Input/Forward", input.forward);
+        Logger.recordOutput("Drive/Input/Left", input.left);
+        Logger.recordOutput("Drive/Input/Rotation", input.rotation);
+        Logger.recordOutput("Drive/Input/State", currentState.toString());
+        Logger.recordOutput("Drive/Input/RobotCentric", robotCentricMode);
+        Logger.recordOutput("Drive/Input/HeadingLocked", lockedHeading.isPresent());
+        Logger.recordOutput("Drive/Input/LockedHeadingDegrees", lockedHeading.map(Rotation2d::getDegrees).orElse(0.0));
+    }
+
     @Override
     public void execute() {
         final ManualDriveInput input = inputSmoother.getSmoothedInput();
+        if (robotCentricMode) {
+            swerve.setControl(
+                robotCentricRequest
+                    .withVelocityX(Driving.kMaxSpeed.times(input.forward))
+                    .withVelocityY(Driving.kMaxSpeed.times(input.left))
+                    .withRotationalRate(Driving.kMaxRotationalRate.times(input.rotation))
+            );
+            previousInput = input;
+            logInput(input);
+            return;
+        }
         if (input.hasRotation()) {
             currentState = State.DRIVING_WITH_MANUAL_ROTATION;
         } else if (input.hasTranslation()) {
@@ -138,6 +196,7 @@ public class ManualDriveCommand extends Command {
                 );
                 break;
         }
+        logInput(input);
     }
 
     @Override

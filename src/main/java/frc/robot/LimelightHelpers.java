@@ -6,7 +6,9 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -357,6 +359,143 @@ public class LimelightHelpers {
         }
     }
 
+    public static class RetroreflectiveResult {
+        @JsonProperty("tx")
+        public double tx;
+
+        @JsonProperty("ty")
+        public double ty;
+
+        @JsonProperty("ta")
+        public double ta;
+
+        @JsonProperty("pts")
+        public double[][] corners;
+    }
+
+    public static class FiducialResult {
+        @JsonProperty("fID")
+        public int fiducialID;
+
+        @JsonProperty("fam")
+        public String family;
+
+        @JsonProperty("tx")
+        public double tx;
+
+        @JsonProperty("ty")
+        public double ty;
+
+        @JsonProperty("ta")
+        public double ta;
+
+        @JsonProperty("t6c_ts")
+        public double[] cameraPose_TargetSpace;
+
+        @JsonProperty("t6t_cs")
+        public double[] targetPose_CameraSpace;
+
+        @JsonProperty("t6t_rs")
+        public double[] targetPose_RobotSpace;
+
+        @JsonProperty("t6r_fs")
+        public double[] robotPose_FieldSpace;
+
+        @JsonProperty("pts")
+        public double[][] corners;
+    }
+
+    public static class DetectorResult {
+        @JsonProperty("class")
+        public String className;
+
+        @JsonProperty("classID")
+        public int classID;
+
+        @JsonProperty("conf")
+        public double confidence;
+
+        @JsonProperty("tx")
+        public double tx;
+
+        @JsonProperty("ty")
+        public double ty;
+
+        @JsonProperty("ta")
+        public double ta;
+
+        @JsonProperty("pts")
+        public double[][] corners;
+    }
+
+    public static class ClassifierResult {
+        @JsonProperty("class")
+        public String className;
+
+        @JsonProperty("classID")
+        public int classID;
+
+        @JsonProperty("conf")
+        public double confidence;
+
+        @JsonProperty("tx")
+        public double tx;
+
+        @JsonProperty("ty")
+        public double ty;
+
+        @JsonProperty("ta")
+        public double ta;
+    }
+
+    public static class Results {
+        @JsonProperty("pID")
+        public double pipelineID;
+
+        @JsonProperty("tl")
+        public double latency_pipeline;
+
+        @JsonProperty("cl")
+        public double latency_capture;
+
+        @JsonProperty("ts")
+        public double timestamp_LIMELIGHT_publish;
+
+        @JsonProperty("ts_rio")
+        public double timestamp_RIOFPGA_capture;
+
+        @JsonProperty("v")
+        public int valid;
+
+        @JsonProperty("botpose")
+        public double[] botpose;
+
+        @JsonProperty("botpose_wpiblue")
+        public double[] botpose_wpiblue;
+
+        @JsonProperty("botpose_wpired")
+        public double[] botpose_wpired;
+
+        @JsonProperty("Retro")
+        public List<RetroreflectiveResult> retroResults;
+
+        @JsonProperty("Fiducial")
+        public List<FiducialResult> fiducialResults;
+
+        @JsonProperty("Detector")
+        public List<DetectorResult> detectorResults;
+
+        @JsonProperty("Classifier")
+        public List<ClassifierResult> classifierResults;
+
+        public Results() {
+            this.retroResults = new ArrayList<>();
+            this.fiducialResults = new ArrayList<>();
+            this.detectorResults = new ArrayList<>();
+            this.classifierResults = new ArrayList<>();
+        }
+    }
+
     /**
      * Limelight Results object, parsed from a Limelight's JSON results output.
      */
@@ -408,6 +547,9 @@ public class LimelightHelpers {
 
         @JsonProperty("t6c_rs")
         public double[] camerapose_robotspace;
+
+        @JsonProperty("Results")
+        public Results targetingResults;
 
         public Pose3d getBotPose3d() {
             return toPose3D(botpose);
@@ -637,6 +779,14 @@ public class LimelightHelpers {
         }
     }
 
+    //can the limelights see a certain tag?
+    public static boolean canSeeTag(String limelightName, int tagId) {
+        if (getTV(limelightName) != true) { //if no tags seen then we return false bc we cant see a tag
+            return false;
+        }
+
+        return (int) getFiducialID(limelightName) == tagId; //see if we found the right id - getFiducialID is a ll method that gets the id of tags it sees
+    }
 
     private static ObjectMapper mapper;
 

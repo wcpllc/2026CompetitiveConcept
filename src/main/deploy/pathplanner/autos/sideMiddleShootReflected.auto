@@ -1,0 +1,56 @@
+{
+  "version": "2025.0",
+  "command": {
+    "type": "sequential",
+    "data": {
+      "commands": [
+        {
+          "type": "path",
+          "data": {
+            "pathName": "Over the bump reflected"
+          }
+        },
+        {
+          "type": "path",
+          "data": {
+            "pathName": "straight intake reflected"
+          }
+        },
+        {
+          "type": "path",
+          "data": {
+            "pathName": "Back over the bump reflected"
+          }
+        },
+        {
+          "type": "path",
+          "data": {
+            "pathName": "Shoot reflected"
+          }
+        },
+        {
+          "type": "race",
+          "data": {
+            "commands": [
+              {
+                "type": "named",
+                "data": {
+                  "name": "Shoot Manual with Shot Table"
+                }
+              },
+              {
+                "type": "wait",
+                "data": {
+                  "waitTime": 5.0
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "resetOdom": true,
+  "folder": null,
+  "choreoAuto": false
+}
