@@ -174,7 +174,7 @@ public class Autos {
       List.of(
           new AutoRoutine(
               false,
-              "MadTown-auto",
-              List.of("ShootPreload")));
+              "Do Nothing",
+              List.of("do nothing")));
               
 }
